@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bangla + English ALPR</title>
+  <style>
+    :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --fg:#e8eaed; --mut:#9aa4b2; --accent:#22c55e; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font-family: 'Nirmala UI', 'Noto Sans Bengali', system-ui, Segoe UI, Roboto, sans-serif;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 28px 18px 60px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    p.sub { color: var(--mut); margin: 0 0 22px; font-size: 14px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    input[type=file] { color: var(--mut); font-size: 14px; }
+    button {
+      background: var(--accent); color: #06210f; border: 0; border-radius: 8px;
+      padding: 9px 16px; font-weight: 600; cursor: pointer; font-size: 14px;
+    }
+    button:disabled { opacity: .55; cursor: default; }
+    #status { color: var(--mut); font-size: 13px; min-height: 18px; margin-top: 10px; }
+    canvas { max-width: 100%; border-radius: 10px; margin-top: 16px; display: none; border: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; display: none; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--mut); font-weight: 600; }
+    .plate-text { font-size: 17px; font-weight: 600; letter-spacing: .3px; }
+    .badge { font-size: 12px; color: var(--mut); }
+    code { background: #0b0d11; padding: 1px 5px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>License Plate Recognition</h1>
+    <p class="sub">Detects plates with YOLO and reads Bangla + English text (EasyOCR).</p>
+
+    <div class="card">
+      <div class="row">
+        <input id="file" type="file" accept="image/*" />
+        <button id="go" disabled>Detect &amp; Read</button>
+      </div>
+      <div id="status"></div>
+      <canvas id="canvas"></canvas>
+      <table id="results">
+        <thead>
+          <tr><th>#</th><th>Text</th><th>Detect</th><th>OCR</th><th>Box [x1,y1,x2,y2]</th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const fileEl = document.getElementById('file');
+    const goEl = document.getElementById('go');
+    const statusEl = document.getElementById('status');
+    const canvas = document.getElementById('canvas');
+    const table = document.getElementById('results');
+    const tbody = document.getElementById('tbody');
+    const ctx = canvas.getContext('2d');
+
+    let img = null;
+
+    fileEl.addEventListener('change', () => {
+      const f = fileEl.files[0];
+      if (!f) { goEl.disabled = true; return; }
+      const url = URL.createObjectURL(f);
+      img = new Image();
+      img.onload = () => { draw([]); goEl.disabled = false; statusEl.textContent = ''; };
+      img.src = url;
+      table.style.display = 'none';
+      tbody.innerHTML = '';
+    });
+
+    function draw(plates) {
+      if (!img) return;
+      const maxW = 800;
+      const scale = Math.min(1, maxW / img.naturalWidth);
+      canvas.width = img.naturalWidth * scale;
+      canvas.height = img.naturalHeight * scale;
+      canvas.style.display = 'block';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#22c55e';
+      ctx.fillStyle = '#22c55e';
+      ctx.font = '13px system-ui';
+      plates.forEach((p, i) => {
+        const [x1, y1, x2, y2] = p.box.map(v => v * scale);
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        const tag = `#${i + 1} ${(p.detection_confidence || 0).toFixed(2)}`;
+        ctx.fillText(tag, x1 + 3, Math.max(12, y1 - 4));
+      });
+    }
+
+    goEl.addEventListener('click', async () => {
+      const f = fileEl.files[0];
+      if (!f) return;
+      goEl.disabled = true;
+      statusEl.textContent = 'Running detection + OCR…';
+      try {
+        const fd = new FormData();
+        fd.append('file', f);
+        const res = await fetch('/predict', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        draw(data.plates);
+        renderTable(data.plates);
+        statusEl.textContent = `Found ${data.count} plate(s).`;
+      } catch (e) {
+        statusEl.textContent = 'Error: ' + e.message;
+      } finally {
+        goEl.disabled = false;
+      }
+    });
+
+    function renderTable(plates) {
+      tbody.innerHTML = '';
+      if (!plates.length) { table.style.display = 'none'; return; }
+      plates.forEach((p, i) => {
+        const tr = document.createElement('tr');
+        const note = p.note ? ` <span class="badge">(${p.note})</span>` : '';
+        tr.innerHTML =
+          `<td>${i + 1}</td>` +
+          `<td class="plate-text">${escapeHtml(p.text) || '<span class="badge">—</span>'}${note}</td>` +
+          `<td>${(p.detection_confidence || 0).toFixed(2)}</td>` +
+          `<td>${(p.ocr_confidence || 0).toFixed(2)}</td>` +
+          `<td><code>${p.box.join(', ')}</code></td>`;
+        tbody.appendChild(tr);
+      });
+      table.style.display = 'table';
+    }
+
+    function escapeHtml(s) {
+      return (s || '').replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+  </script>
+</body>
+</html>

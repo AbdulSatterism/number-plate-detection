@@ -1,0 +1,18 @@
+# Ultralytics dataset config for license-plate detection.
+#
+# Expected YOLO folder layout (relative to `path` below):
+#   data/
+#     images/train/*.jpg      labels/train/*.txt
+#     images/val/*.jpg        labels/val/*.txt
+#
+# Each label .txt has one line per box:
+#   <class> <x_center> <y_center> <width> <height>   (all normalized 0..1)
+# With a single class, <class> is always 0.
+
+path: data
+train: images/train
+val: images/val
+
+nc: 1
+names:
+  0: license_plate

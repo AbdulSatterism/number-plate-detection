@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.env
+
+# Model weights (large; train or download instead of committing)
+*.pt
+models/*
+!models/.gitkeep
+
+# Ultralytics training runs
+runs/
+
+# Datasets (keep the config, not the data)
+data/images/
+data/labels/
+
+# Outputs
+*_annotated.png
+outputs/
+
+# OS
+.DS_Store
+Thumbs.db
