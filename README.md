@@ -48,12 +48,17 @@ pip install -r requirements.txt
 > install torch from the official index first, e.g.
 > `pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121`,
 > then `pip install -r requirements.txt`.
+<!-- 
+source .venv/Scripts/activate
+python -m pip install -r requirements.txt -->
 
 Run the API + UI:
 
 ```bash
 uvicorn app.main:app --reload
 ```
+
+<!-- install --upgrade pip && .venv/Scripts/python.exe -m pip install -r requirements.txt -->
 
 Open <http://127.0.0.1:8000> and upload an image.
 
