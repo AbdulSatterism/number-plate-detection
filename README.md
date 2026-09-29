@@ -48,17 +48,12 @@ pip install -r requirements.txt
 > install torch from the official index first, e.g.
 > `pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121`,
 > then `pip install -r requirements.txt`.
-<!-- 
-source .venv/Scripts/activate
-python -m pip install -r requirements.txt -->
 
 Run the API + UI:
 
 ```bash
 uvicorn app.main:app --reload
 ```
-
-<!-- install --upgrade pip && .venv/Scripts/python.exe -m pip install -r requirements.txt -->
 
 Open <http://127.0.0.1:8000> and upload an image.
 
@@ -162,3 +157,39 @@ All optional — copy `.env.example` to `.env` (or set env vars). Highlights:
   (`recognize(crop) -> RecognitionResult`) stays the same.
 - **Preprocessing:** `crop_padding` pads plate crops before OCR; tune it if
   characters get clipped.
+
+---
+
+## 🧪 Testing & Verification Guide (For Other Developers / Testers)
+
+> **No model training required to test!** The application works out of the box with zero pre-training steps.
+
+### Step 1: Clone & Install Dependencies
+```bash
+git clone <repo-url>
+cd number-plate-detection
+
+# Setup Python environment
+python -m venv .venv
+# Windows:
+.venv\Scripts\Activate.ps1
+# Linux / macOS:
+source .venv/bin/activate
+
+# Install requirements
+pip install -r requirements.txt
+```
+
+### Step 2: Test via Web UI
+```bash
+uvicorn app.main:app --reload
+```
+1. Open **`http://127.0.0.1:8000`** in your browser.
+2. Drag and drop any vehicle image with a visible license plate.
+3. The UI will instantly display the detected license plate bounding box and the extracted Bangla + English characters.
+
+### Step 3: Test via CLI
+```bash
+python scripts/predict_cli.py path/to/car.jpg
+```
+This prints the detection & OCR JSON in the console and outputs an annotated image `path/to/car_annotated.png`.
