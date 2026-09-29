@@ -40,7 +40,15 @@ class ALPRPipeline:
         return image[y1:y2, x1:x2]
 
     def predict(self, image: np.ndarray) -> PredictResponse:
+        # Step 1: Detect with configured threshold
         detections = self.detector.detect(image)
+
+        # Step 2: If no plates found with primary threshold, try sensitive secondary pass
+        if not detections and self.detector.is_trained:
+            sensitive_conf = max(0.08, settings.conf_threshold * 0.5)
+            logger.info("Retrying plate detection with sensitive threshold (conf=%.2f)...", sensitive_conf)
+            detections = self.detector.detect(image, conf=sensitive_conf)
+
         plates: List[PlateResult] = []
 
         if detections:
@@ -56,20 +64,21 @@ class ALPRPipeline:
                         tokens=rec.tokens if rec else [],
                     )
                 )
-        elif not self.detector.is_trained and self.full_frame_fallback:
-            logger.info("Untrained detector: running full-frame OCR fallback.")
+        elif self.full_frame_fallback:
+            logger.info("No plate detected: running full-frame OCR fallback.")
             rec = self.recognizer.recognize(image)
             h, w = image.shape[:2]
-            plates.append(
-                PlateResult(
-                    box=[0, 0, w, h],
-                    detection_confidence=0.0,
-                    text=rec.text,
-                    ocr_confidence=rec.confidence,
-                    tokens=rec.tokens,
-                    note="full_frame_fallback",
+            if rec.text:
+                plates.append(
+                    PlateResult(
+                        box=[0, 0, w, h],
+                        detection_confidence=0.0,
+                        text=rec.text,
+                        ocr_confidence=rec.confidence,
+                        tokens=rec.tokens,
+                        note="full_frame_fallback",
+                    )
                 )
-            )
 
         return PredictResponse(count=len(plates), plates=plates)
 
