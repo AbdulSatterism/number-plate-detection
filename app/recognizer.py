@@ -7,14 +7,38 @@ or a custom-trained recognition model without touching the rest of the pipeline.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
-
+import cv2
 import numpy as np
 
 from .config import settings
 from .schemas import OcrToken, RecognitionResult
 
 logger = logging.getLogger(__name__)
+
+
+def _preprocess_plate_crop(crop: np.ndarray) -> np.ndarray:
+    """Enhance plate crop contrast and resolution for superior OCR accuracy."""
+    h, w = crop.shape[:2]
+    if h == 0 or w == 0:
+        return crop
+
+    # 1. Intelligent Upscaling: EasyOCR struggles if plate is less than ~300px wide
+    min_w = 320
+    if w < min_w:
+        scale = min_w / float(w)
+        crop = cv2.resize(crop, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+
+    # 2. Contrast Enhancement (CLAHE on L-channel in LAB space)
+    lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
+    l_channel, a_channel, b_channel = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    cl = clahe.apply(l_channel)
+    enhanced_lab = cv2.merge((cl, a_channel, b_channel))
+    enhanced_bgr = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+
+    # 3. Bilateral smoothing to remove noise while preserving sharp font edges
+    denoised = cv2.bilateralFilter(enhanced_bgr, d=5, sigmaColor=50, sigmaSpace=50)
+    return denoised
 
 
 class PlateRecognizer:
@@ -34,8 +58,24 @@ class PlateRecognizer:
         if crop is None or crop.size == 0:
             return RecognitionResult()
 
-        # detail=1 -> [(bbox, text, confidence), ...]; paragraph=False keeps tokens.
-        raw = self.reader.readtext(crop, detail=1, paragraph=False)
+        processed_crop = _preprocess_plate_crop(crop)
+
+        # Pass 1: Enhanced crop
+        raw = self.reader.readtext(
+            processed_crop,
+            detail=1,
+            paragraph=False,
+            mag_ratio=1.5,
+        )
+
+        # Pass 2: If pass 1 returned nothing, try raw crop with high magnification
+        if not raw:
+            raw = self.reader.readtext(
+                crop,
+                detail=1,
+                paragraph=False,
+                mag_ratio=2.0,
+            )
 
         tokens: List[OcrToken] = []
         for _bbox, text, conf in raw:
