@@ -45,14 +45,15 @@ class PlateDetector:
         self.conf = settings.conf_threshold
         self.iou = settings.iou_threshold
 
-    def detect(self, image: np.ndarray) -> List[Detection]:
+    def detect(self, image: np.ndarray, conf: Optional[float] = None) -> List[Detection]:
         """Run detection on a BGR image (as read by OpenCV)."""
         if not self.is_trained:
             return []
 
+        c = conf if conf is not None else self.conf
         results = self.model.predict(
             source=image,
-            conf=self.conf,
+            conf=c,
             iou=self.iou,
             device=self.device,
             verbose=False,
